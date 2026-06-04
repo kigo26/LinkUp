@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { motion, AnimatePresence } from "motion/react";
-import { Send, Users, Link as LinkIcon, AlertCircle, Copy, Sparkles, Hash, PanelRightClose, PanelRightOpen, ArrowLeft, Check, CheckCheck } from "lucide-react";
+import { Send, Users, Link as LinkIcon, AlertCircle, Copy, Sparkles, Hash, PanelRightClose, PanelRightOpen, ArrowLeft, Check, CheckCheck, Smile } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { cn } from "../lib/utils";
@@ -22,7 +22,12 @@ interface Message {
   timestamp: number;
   isAiResponse?: boolean;
   seenBy?: string[];
+  reactions?: {
+    [emoji: string]: string[];
+  };
 }
+
+const QUICK_EMOJIS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 
 const COLORS = [
   "bg-red-500", "bg-orange-500", "bg-amber-500", "bg-green-500", 
@@ -49,6 +54,7 @@ export default function Room() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showJoinModal, setShowJoinModal] = useState(true);
   const [joinName, setJoinName] = useState("");
+  const [activeEmojiPickerMsgId, setActiveEmojiPickerMsgId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -170,6 +176,11 @@ export default function Room() {
 
     socket.emit("send_message", { roomId, message: newMsg });
     setInputValue("");
+  };
+
+  const handleReact = (messageId: string, emoji: string) => {
+    if (!user || !roomId || !socket || !isConnected) return;
+    socket.emit("add_reaction", { roomId, messageId, emoji, userId: user.id });
   };
 
   const copyLink = () => {
@@ -306,52 +317,136 @@ export default function Room() {
                          <span className="text-[10px] text-slate-500">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                        </div>
                     )}
-                    <div className={cn(
-                      "p-4 rounded-2xl max-w-lg text-left flex flex-col gap-1",
-                      isMe ? "bg-purple-600 border border-purple-500/50 rounded-tr-none shadow-[0_4px_20px_rgba(147,51,234,0.15)] text-white" : "bg-white/5 border border-white/5 rounded-tl-none",
-                      msgUser.isAi && "bg-white/5 border border-white/5 border-l-pink-500/50 !rounded-tl-none"
-                    )}>
-                      <p className={cn("text-sm leading-relaxed break-words", isMe ? "text-white" : "text-slate-300")}>{msg.text}</p>
-                      <span 
-                        className={cn("text-[9px] self-end uppercase select-none opacity-85 mt-1 font-medium flex items-center gap-1 cursor-help", isMe ? "text-purple-250" : "text-slate-500")}
-                        title={msg.seenBy && msg.seenBy.length > 0 
-                          ? `Seen by: ${msg.seenBy.map(id => {
-                              if (id === user?.id) return 'You';
-                              if (id === 'ai-assistant') return 'LinkUp AI';
-                              return members.find(m => m.id === id)?.name || 'Unknown User';
-                            }).join(', ')}` 
-                          : "Not seen yet"
-                        }
-                      >
-                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {isMe && (
-                          <span className="shrink-0 flex items-center justify-center">
-                            {(() => {
-                              const otherSeen = msg.seenBy ? msg.seenBy.filter(id => id !== user?.id) : [];
-                              const totalOtherMembers = members.filter(m => m.id !== user?.id).length;
-                              
-                              if (otherSeen.length > 0) {
-                                const isFullySeen = totalOtherMembers > 0 && otherSeen.length >= totalOtherMembers;
+                    <div className="relative group/bubble flex items-center gap-2">
+                      {isMe && (
+                        <button 
+                          type="button"
+                          onClick={() => setActiveEmojiPickerMsgId(activeEmojiPickerMsgId === msg.id ? null : msg.id)}
+                          className="opacity-100 lg:opacity-0 lg:group-hover/bubble:opacity-100 focus:opacity-100 p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-slate-200 transition-all self-center shrink-0"
+                          title="React to message"
+                        >
+                          <Smile size={14} />
+                        </button>
+                      )}
+
+                      <div className={cn(
+                        "p-4 rounded-2xl max-w-lg text-left flex flex-col gap-1 relative",
+                        isMe ? "bg-purple-600 border border-purple-500/50 rounded-tr-none shadow-[0_4px_20px_rgba(147,51,234,0.15)] text-white" : "bg-white/5 border border-white/5 rounded-tl-none",
+                        msgUser.isAi && "bg-white/5 border border-white/5 border-l-pink-500/50 !rounded-tl-none"
+                      )}>
+                        <p className={cn("text-sm leading-relaxed break-words", isMe ? "text-white" : "text-slate-300")}>{msg.text}</p>
+                        <span 
+                          className={cn("text-[9px] self-end uppercase select-none opacity-85 mt-1 font-medium flex items-center gap-1 cursor-help", isMe ? "text-purple-250" : "text-slate-500")}
+                          title={msg.seenBy && msg.seenBy.length > 0 
+                            ? `Seen by: ${msg.seenBy.map(id => {
+                                if (id === user?.id) return 'You';
+                                if (id === 'ai-assistant') return 'LinkUp AI';
+                                return members.find(m => m.id === id)?.name || 'Unknown User';
+                              }).join(', ')}` 
+                            : "Not seen yet"
+                          }
+                        >
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {isMe && (
+                            <span className="shrink-0 flex items-center justify-center">
+                              {(() => {
+                                const otherSeen = msg.seenBy ? msg.seenBy.filter(id => id !== user?.id) : [];
+                                const totalOtherMembers = members.filter(m => m.id !== user?.id).length;
+                                
+                                if (otherSeen.length > 0) {
+                                  const isFullySeen = totalOtherMembers > 0 && otherSeen.length >= totalOtherMembers;
+                                  return (
+                                    <CheckCheck 
+                                      size={12} 
+                                      className={cn(
+                                        isFullySeen ? "text-purple-100 font-bold" : "text-purple-300/60"
+                                      )} 
+                                    />
+                                  );
+                                }
                                 return (
-                                  <CheckCheck 
+                                  <Check 
                                     size={12} 
-                                    className={cn(
-                                      isFullySeen ? "text-purple-100 font-bold" : "text-purple-300/60"
-                                    )} 
+                                    className="text-purple-300/40" 
                                   />
                                 );
-                              }
+                              })()}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      {!isMe && (
+                        <button 
+                          type="button"
+                          onClick={() => setActiveEmojiPickerMsgId(activeEmojiPickerMsgId === msg.id ? null : msg.id)}
+                          className="opacity-100 lg:opacity-0 lg:group-hover/bubble:opacity-100 focus:opacity-100 p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-slate-200 transition-all self-center shrink-0"
+                          title="React to message"
+                        >
+                          <Smile size={14} />
+                        </button>
+                      )}
+
+                      {activeEmojiPickerMsgId === msg.id && (
+                        <>
+                          <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setActiveEmojiPickerMsgId(null)} />
+                          <div className={cn(
+                            "absolute z-50 bottom-full mb-2 bg-[#0c0c0e]/95 backdrop-blur-md border border-white/10 rounded-full p-1.5 flex gap-1 shadow-xl",
+                            isMe ? "right-12" : "left-12"
+                          )}>
+                            {QUICK_EMOJIS.map(emoji => {
+                              const hasReacted = msg.reactions?.[emoji]?.includes(user?.id || "") || false;
                               return (
-                                <Check 
-                                  size={12} 
-                                  className="text-purple-300/40" 
-                                />
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => {
+                                    handleReact(msg.id, emoji);
+                                    setActiveEmojiPickerMsgId(null);
+                                  }}
+                                  className={cn(
+                                    "w-8 h-8 rounded-full flex items-center justify-center text-lg active:scale-125 transition-all",
+                                    hasReacted ? "bg-purple-500/25 scale-110" : "hover:bg-white/10"
+                                  )}
+                                >
+                                  {emoji}
+                                </button>
                               );
-                            })()}
-                          </span>
-                        )}
-                      </span>
+                            })}
+                          </div>
+                        </>
+                      )}
                     </div>
+
+                    {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                      <div className={cn("flex flex-wrap gap-1 mt-1", isMe ? "justify-end" : "justify-start")}>
+                        {Object.entries(msg.reactions).map(([emoji, rawUserIds]) => {
+                          const userIds = rawUserIds as string[];
+                          const hasReacted = userIds.includes(user?.id || "");
+                          return (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => handleReact(msg.id, emoji)}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-all border",
+                                hasReacted 
+                                  ? "bg-purple-500/25 border-purple-400/50 text-purple-200 shadow-[0_0_8px_rgba(168,85,247,0.15)]" 
+                                  : "bg-white/5 border-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200"
+                              )}
+                              title={userIds.map(id => {
+                                if (id === user?.id) return 'You';
+                                if (id === 'ai-assistant') return 'LinkUp AI';
+                                return members.find(m => m.id === id)?.name || 'Unknown User';
+                              }).join(', ')}
+                            >
+                              <span>{emoji}</span>
+                              <span className="text-[10px] font-semibold">{userIds.length}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {isMe && (

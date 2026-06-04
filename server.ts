@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { Server } from "socket.io";
 import { createServer } from "http";
@@ -92,6 +93,31 @@ async function startServer() {
       }
     });
 
+    socket.on("add_reaction", ({ roomId, messageId, emoji, userId }) => {
+      const room = rooms.get(roomId);
+      if (room) {
+        const msg = room.history.find(m => m.id === messageId);
+        if (msg) {
+          if (!msg.reactions) {
+            msg.reactions = {};
+          }
+          if (!msg.reactions[emoji]) {
+            msg.reactions[emoji] = [];
+          }
+          const idx = msg.reactions[emoji].indexOf(userId);
+          if (idx > -1) {
+            msg.reactions[emoji].splice(idx, 1);
+            if (msg.reactions[emoji].length === 0) {
+              delete msg.reactions[emoji];
+            }
+          } else {
+            msg.reactions[emoji].push(userId);
+          }
+          io.to(roomId).emit("room_history", room.history);
+        }
+      }
+    });
+
     socket.on("send_message", async ({ roomId, message }) => {
       const room = rooms.get(roomId);
       if (room) {
@@ -172,9 +198,25 @@ Respond clearly, concisely, and playfully in plain text.`;
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: "custom",
     });
     app.use(vite.middlewares);
+
+    app.get('*', async (req, res, next) => {
+      const url = req.originalUrl;
+      // Skip API and websocket paths
+      if (url.startsWith('/api') || url.startsWith('/socket.io')) {
+        return next();
+      }
+      try {
+        let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e) {
+        vite.ssrFixStacktrace(e as Error);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
