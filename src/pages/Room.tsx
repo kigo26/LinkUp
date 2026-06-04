@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { motion, AnimatePresence } from "motion/react";
-import { Send, Users, Link as LinkIcon, AlertCircle, Copy, Sparkles, Hash, PanelRightClose, PanelRightOpen, ArrowLeft } from "lucide-react";
+import { Send, Users, Link as LinkIcon, AlertCircle, Copy, Sparkles, Hash, PanelRightClose, PanelRightOpen, ArrowLeft, Check, CheckCheck } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { cn } from "../lib/utils";
@@ -21,6 +21,7 @@ interface Message {
   text: string;
   timestamp: number;
   isAiResponse?: boolean;
+  seenBy?: string[];
 }
 
 const COLORS = [
@@ -130,6 +131,17 @@ export default function Room() {
       socket.off("new_message", onNewMessage);
     };
   }, [roomId, user, socket, isSocketConnected]);
+
+  // Automatically mark messages as read when they arrive or load
+  useEffect(() => {
+    if (!user || !roomId || !socket || !isConnected) return;
+    
+    // Check if there are any messages that we haven't read yet
+    const hasUnread = messages.some(msg => !msg.seenBy?.includes(user.id));
+    if (hasUnread) {
+      socket.emit("mark_as_read", { roomId, userId: user.id });
+    }
+  }, [messages, user, roomId, socket, isConnected]);
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -300,8 +312,44 @@ export default function Room() {
                       msgUser.isAi && "bg-white/5 border border-white/5 border-l-pink-500/50 !rounded-tl-none"
                     )}>
                       <p className={cn("text-sm leading-relaxed break-words", isMe ? "text-white" : "text-slate-300")}>{msg.text}</p>
-                      <span className={cn("text-[9px] self-end uppercase select-none opacity-85 mt-1 font-medium", isMe ? "text-purple-200" : "text-slate-500")}>
+                      <span 
+                        className={cn("text-[9px] self-end uppercase select-none opacity-85 mt-1 font-medium flex items-center gap-1 cursor-help", isMe ? "text-purple-250" : "text-slate-500")}
+                        title={msg.seenBy && msg.seenBy.length > 0 
+                          ? `Seen by: ${msg.seenBy.map(id => {
+                              if (id === user?.id) return 'You';
+                              if (id === 'ai-assistant') return 'LinkUp AI';
+                              return members.find(m => m.id === id)?.name || 'Unknown User';
+                            }).join(', ')}` 
+                          : "Not seen yet"
+                        }
+                      >
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isMe && (
+                          <span className="shrink-0 flex items-center justify-center">
+                            {(() => {
+                              const otherSeen = msg.seenBy ? msg.seenBy.filter(id => id !== user?.id) : [];
+                              const totalOtherMembers = members.filter(m => m.id !== user?.id).length;
+                              
+                              if (otherSeen.length > 0) {
+                                const isFullySeen = totalOtherMembers > 0 && otherSeen.length >= totalOtherMembers;
+                                return (
+                                  <CheckCheck 
+                                    size={12} 
+                                    className={cn(
+                                      isFullySeen ? "text-purple-100 font-bold" : "text-purple-300/60"
+                                    )} 
+                                  />
+                                );
+                              }
+                              return (
+                                <Check 
+                                  size={12} 
+                                  className="text-purple-300/40" 
+                                />
+                              );
+                            })()}
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>

@@ -98,71 +98,39 @@ export default function Landing() {
         
         <motion.div 
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}
-          className="flex items-center gap-4"
+          className="flex items-center gap-3"
         >
-          <Button variant="ghost" className="hidden md:flex text-slate-300 hover:text-white hover:bg-white/5">Sign In</Button>
-          <Button onClick={handleOpenCreate} className="bg-white/10 hover:bg-white/20 text-white border-white/5 shadow-[0_0_15px_rgba(255,255,255,0.05)] border">
-            Create Free Room
+          <Button 
+            onClick={handleOpenCreate} 
+            className="bg-purple-600 hover:bg-purple-500 text-white border-purple-500/50 shadow-[0_0_15px_rgba(147,51,234,0.2)] border text-sm rounded-xl h-10 px-4"
+          >
+            Start Chatting Now
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={handleOpenCreate}
+            className="bg-white/5 hover:bg-white/10 text-white border-white/10 text-sm rounded-xl h-10 px-4"
+          >
+            Create Room
+          </Button>
+          <Button 
+            variant="ghost" 
+            onClick={() => setIsJoinModalOpen(true)} 
+            className="text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 text-sm rounded-xl h-10 px-4"
+          >
+            Join Existing Room
           </Button>
         </motion.div>
       </header>
 
-      <main className="relative z-10 flex-1 flex flex-col lg:flex-row items-center justify-center px-6 pt-12 pb-24 gap-16 max-w-7xl mx-auto w-full">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pt-12 pb-24 max-w-7xl mx-auto w-full">
         
-        {/* Left Content - Hero */}
-        <div className="flex-1 flex flex-col items-center lg:items-start text-center lg:text-left z-20">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-purple-300 text-xs font-semibold uppercase tracking-widest mb-8"
-          >
-            <Sparkles size={12} className="text-pink-400" />
-            <span>LinkUp Protocol 2.0</span>
-          </motion.div>
-
-          <motion.p 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-lg text-slate-400 max-w-xl mb-10 leading-relaxed"
-          >
-            Generate a private, secure chat space in seconds. No tedious onboarding, no mandatory apps. Just share a link and start collaborating.
-          </motion.p>
-
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="flex flex-col sm:flex-row items-center gap-4 w-full justify-center lg:justify-start"
-          >
-            <Button 
-              size="lg" 
-              className="w-full sm:w-auto h-14 px-8 text-base bg-purple-600 hover:bg-purple-500 text-white rounded-xl shadow-[0_4px_25px_rgba(147,51,234,0.3)] transition-all transform hover:scale-[1.02] active:scale-95 group" 
-              onClick={handleOpenCreate} 
-              disabled={isCreating}
-            >
-              {isCreating ? 'Provisioning Environment...' : 'Start Chatting Now'}
-              {!isCreating && <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />}
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
-              onClick={() => setIsJoinModalOpen(true)}
-              className="w-full sm:w-auto h-14 px-8 text-base rounded-xl bg-white/5 border-white/10 text-white hover:bg-white/10 transition-all"
-            >
-              <LinkIcon className="mr-2 w-4 h-4 text-slate-400" />
-              Join Existing Room
-            </Button>
-          </motion.div>
-        </div>
-
         {/* Right Content - Mock Chat GUI */}
         <motion.div 
-          initial={{ opacity: 0, x: 40 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8, delay: 0.4, type: "spring", bounce: 0.2 }}
-          className="flex-1 w-full max-w-md lg:max-w-xl relative"
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2, type: "spring", bounce: 0.2 }}
+          className="w-full max-w-md lg:max-w-xl relative mx-auto"
         >
           {/* Glassmorphic Container */}
           <div className="bg-[#0c0c0e]/80 backdrop-blur-2xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl relative shadow-purple-900/20">

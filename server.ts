@@ -55,17 +55,47 @@ async function startServer() {
         existingUser.socketId = socket.id; // update socket id
       }
 
+      // Mark all past history as seen by this user
+      room.history.forEach(msg => {
+        if (!msg.seenBy) {
+          msg.seenBy = [msg.userId];
+        }
+        if (!msg.seenBy.includes(user.id)) {
+          msg.seenBy.push(user.id);
+        }
+      });
+
       // Broadcast user joined
       io.to(roomId).emit("user_joined", room.members);
       
-      // Send chat history to the joined user
-      socket.emit("room_history", room.history);
+      // Send updated chat history to everyone so they see the updated seenBy checkmarks immediately
+      io.to(roomId).emit("room_history", room.history);
       socket.emit("room_info", { name: room.name });
+    });
+
+    socket.on("mark_as_read", ({ roomId, userId }) => {
+      const room = rooms.get(roomId);
+      if (room) {
+        let updated = false;
+        room.history.forEach(msg => {
+          if (!msg.seenBy) {
+            msg.seenBy = [msg.userId];
+          }
+          if (!msg.seenBy.includes(userId)) {
+            msg.seenBy.push(userId);
+            updated = true;
+          }
+        });
+        if (updated) {
+          io.to(roomId).emit("room_history", room.history);
+        }
+      }
     });
 
     socket.on("send_message", async ({ roomId, message }) => {
       const room = rooms.get(roomId);
       if (room) {
+        message.seenBy = [message.userId];
         room.history.push(message);
         if (room.history.length > 200) room.history.shift(); // keep it bounded
         io.to(roomId).emit("new_message", message);
@@ -78,8 +108,10 @@ async function startServer() {
                userId: 'ai-assistant',
                text: "I am offline. The server admin hasn't configured GEMINI_API_KEY.",
                timestamp: Date.now(),
-               isAiResponse: true
+               isAiResponse: true,
+               seenBy: ['ai-assistant']
             };
+            room.history.push(errorMsg);
             io.to(roomId).emit("new_message", errorMsg);
             return;
           }
