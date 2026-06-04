@@ -22,6 +22,14 @@ async function startServer() {
     }
   });
 
+  // Bypass Express for Socket.io requests so they are handled solely by Socket.io and avoid wildcard/404 conflicts
+  app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/socket.io')) {
+      return;
+    }
+    next();
+  });
+
   // Basic API route
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
@@ -116,6 +124,10 @@ async function startServer() {
           io.to(roomId).emit("room_history", room.history);
         }
       }
+    });
+
+    socket.on("typing_status", ({ roomId, userId, userName, isTyping }) => {
+      socket.to(roomId).emit("typing_status", { userId, userName, isTyping });
     });
 
     socket.on("send_message", async ({ roomId, message }) => {
@@ -218,7 +230,7 @@ Respond clearly, concisely, and playfully in plain text.`;
       }
     });
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = __dirname.endsWith('dist') ? __dirname : path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

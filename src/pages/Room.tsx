@@ -56,6 +56,10 @@ export default function Room() {
   const [joinName, setJoinName] = useState("");
   const [activeEmojiPickerMsgId, setActiveEmojiPickerMsgId] = useState<string | null>(null);
 
+  const [typingUsers, setTypingUsers] = useState<{ [userId: string]: string }>({});
+  const isIPersonallyTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -76,7 +80,7 @@ export default function Room() {
     scrollToBottom("smooth");
     const timer = setTimeout(() => scrollToBottom("smooth"), 100);
     return () => clearTimeout(timer);
-  }, [messages]);
+  }, [messages, Object.keys(typingUsers).length]);
 
   // Handle Socket Init
   useEffect(() => {
@@ -110,10 +114,32 @@ export default function Room() {
 
     const onUserLeft = (currentMembers: User[]) => {
       setMembers(currentMembers);
+      setTypingUsers(prev => {
+        const updated = { ...prev };
+        for (const id in updated) {
+          if (!currentMembers.some(m => m.id === id)) {
+            delete updated[id];
+          }
+        }
+        return updated;
+      });
     };
 
     const onNewMessage = (msg: Message) => {
       setMessages(prev => [...prev, msg]);
+    };
+
+    const onTypingStatus = ({ userId, userName, isTyping }: { userId: string; userName: string; isTyping: boolean }) => {
+      if (userId === user.id) return;
+      setTypingUsers(prev => {
+        const updated = { ...prev };
+        if (isTyping) {
+          updated[userId] = userName;
+        } else {
+          delete updated[userId];
+        }
+        return updated;
+      });
     };
 
     if (!isSocketConnected) {
@@ -126,6 +152,7 @@ export default function Room() {
     socket.on("user_joined", onUserJoined);
     socket.on("user_left", onUserLeft);
     socket.on("new_message", onNewMessage);
+    socket.on("typing_status", onTypingStatus);
 
     return () => {
       socket.off("connect", onConnect);
@@ -135,6 +162,7 @@ export default function Room() {
       socket.off("user_joined", onUserJoined);
       socket.off("user_left", onUserLeft);
       socket.off("new_message", onNewMessage);
+      socket.off("typing_status", onTypingStatus);
     };
   }, [roomId, user, socket, isSocketConnected]);
 
@@ -148,6 +176,41 @@ export default function Room() {
       socket.emit("mark_as_read", { roomId, userId: user.id });
     }
   }, [messages, user, roomId, socket, isConnected]);
+
+  // Broadcast typing status based on typing input value changes
+  useEffect(() => {
+    if (!user || !roomId || !socket || !isConnected) return;
+
+    if (inputValue.trim() !== "") {
+      if (!isIPersonallyTypingRef.current) {
+        isIPersonallyTypingRef.current = true;
+        socket.emit("typing_status", { roomId, userId: user.id, userName: user.name, isTyping: true });
+      }
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        isIPersonallyTypingRef.current = false;
+        socket.emit("typing_status", { roomId, userId: user.id, userName: user.name, isTyping: false });
+      }, 1500);
+    } else {
+      if (isIPersonallyTypingRef.current) {
+        isIPersonallyTypingRef.current = false;
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        socket.emit("typing_status", { roomId, userId: user.id, userName: user.name, isTyping: false });
+      }
+    }
+
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [inputValue, user, roomId, socket, isConnected]);
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,6 +229,15 @@ export default function Room() {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || !user || !isConnected || !socket) return;
+
+    // Stop typing status instantly upon message submission
+    if (isIPersonallyTypingRef.current) {
+      isIPersonallyTypingRef.current = false;
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      socket.emit("typing_status", { roomId, userId: user.id, userName: user.name, isTyping: false });
+    }
 
     const newMsg: Message = {
       id: uuidv4(),
@@ -226,6 +298,11 @@ export default function Room() {
       </div>
     );
   }
+
+  // Filter typing users to active room members and exclude ourselves
+  const otherTypingUsersList = Object.entries(typingUsers)
+    .filter(([id]) => id !== user?.id && members.some(m => m.id === id))
+    .map(([_, name]) => name);
 
   return (
     <div className="w-full h-screen bg-[#0a0a0c] text-slate-100 flex overflow-hidden font-sans">
@@ -464,6 +541,57 @@ export default function Room() {
               );
             })
           )}
+
+          <AnimatePresence>
+            {otherTypingUsersList.length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ duration: 0.2 }}
+                className="flex gap-4 w-full justify-start mt-1"
+              >
+                <div className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 backdrop-blur-sm">
+                    <div className="flex gap-1">
+                      <motion.span 
+                        animate={{ y: [0, -4, 0] }}
+                        transition={{ duration: 0.6, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 0 }}
+                        className="w-1 h-1 bg-purple-400 rounded-full inline-block" 
+                      />
+                      <motion.span 
+                        animate={{ y: [0, -4, 0] }}
+                        transition={{ duration: 0.6, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 0.15 }}
+                        className="w-1 h-1 bg-purple-400 rounded-full inline-block" 
+                      />
+                      <motion.span 
+                        animate={{ y: [0, -4, 0] }}
+                        transition={{ duration: 0.6, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 0.3 }}
+                        className="w-1 h-1 bg-purple-400 rounded-full inline-block" 
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex-1 space-y-1 flex flex-col items-start">
+                  <div className="py-2.5 px-4 rounded-2xl bg-white/5 border border-white/5 rounded-tl-none flex items-center border-l-purple-500/40">
+                    <p className="text-xs text-slate-400 font-medium">
+                      {otherTypingUsersList.length === 1 && (
+                        <span><strong className="text-slate-300 font-semibold">{otherTypingUsersList[0]}</strong> is typing...</span>
+                      )}
+                      {otherTypingUsersList.length === 2 && (
+                        <span><strong className="text-slate-300 font-semibold">{otherTypingUsersList[0]}</strong> and <strong className="text-slate-300 font-semibold">{otherTypingUsersList[1]}</strong> are typing...</span>
+                      )}
+                      {otherTypingUsersList.length > 2 && (
+                        <span>Several people are typing...</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div ref={messagesEndRef} />
         </div>
 
